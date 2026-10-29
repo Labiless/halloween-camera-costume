@@ -1,10 +1,13 @@
 <script>
   import { scenes } from './lib/scenes/index.js';
-  import { startController } from './lib/controller.svelte.js';
+  import { startController, onButton, BUTTONS } from './lib/controller.svelte.js';
 
   $effect(() => startController());
+  $effect(() => onButton((b) => b === BUTTONS.NEXT_SCENE && goTo(current + 1)));
 
-  let current = $state(0);
+  // ?scene=<id> nell'URL apre direttamente quella scena (comodo in sviluppo)
+  const initial = scenes.findIndex((s) => s.id === new URLSearchParams(location.search).get('scene'));
+  let current = $state(Math.max(0, initial));
   let scene = $derived(scenes[current]);
 
   function goTo(i) {
