@@ -98,6 +98,16 @@
         if (v === undefined || v > 1.1 || v < -1.1) return null;
         return (Math.round((v + 1) / (2 / 7)) + HAT_OFFSET) % 8;
       }
+      // Android: lo stesso analogico arriva come croce direzionale sui bottoni 12-15
+      const DPAD = { up: 12, down: 13, left: 14, right: 15 };
+      const DPAD_OFFSET = 2;
+      function decodeDpad(buttons) {
+        const p = (i) => (buttons[i]?.pressed ? 1 : 0);
+        const x = p(DPAD.right) - p(DPAD.left);
+        const y = p(DPAD.down) - p(DPAD.up);
+        if (!x && !y) return null;
+        return (Math.round(Math.atan2(x, -y) / (Math.PI / 4)) + 8 + DPAD_OFFSET) % 8;
+      }
       let prevHat = null;
 
       function poll() {
@@ -118,7 +128,7 @@
           });
 
           const raw = gp.axes[HAT_AXIS];
-          const hat = decodeHat(raw);
+          const hat = decodeHat(raw) ?? decodeDpad(gp.buttons);
           if (hat !== prevHat) {
             log(`HAT ${hat === null ? '· fermo' : HAT_DIRS[hat]}  (asse ${HAT_AXIS} = ${raw?.toFixed(3)})`);
             prevHat = hat;

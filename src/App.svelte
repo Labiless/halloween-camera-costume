@@ -1,9 +1,22 @@
 <script>
   import { scenes } from './lib/scenes/index.js';
-  import { startController, onButton, BUTTONS } from './lib/controller.svelte.js';
+  import { startController, onButton, onStick, BUTTONS } from './lib/controller.svelte.js';
+
+  // Bottoni che portano direttamente a una scena
+  const SCENE_BUTTONS = {
+    [BUTTONS.SCENE_CAMERA]: 'night-vision',
+    [BUTTONS.SCENE_VOICE]: 'voice',
+  };
 
   $effect(() => startController());
-  $effect(() => onButton((b) => b === BUTTONS.NEXT_SCENE && goTo(current + 1)));
+  $effect(() =>
+    onButton((b) => {
+      if (b === BUTTONS.NEXT_SCENE) goTo(current + 1);
+      else if (b in SCENE_BUTTONS) goToId(SCENE_BUTTONS[b]);
+    })
+  );
+  // Muovere l'analogico riporta sempre all'occhio
+  $effect(() => onStick(() => goToId('eye')));
 
   // ?scene=<id> nell'URL apre direttamente quella scena (comodo in sviluppo)
   const initial = scenes.findIndex((s) => s.id === new URLSearchParams(location.search).get('scene'));
@@ -14,11 +27,15 @@
     current = (i + scenes.length) % scenes.length;
   }
 
-  // Temporaneo: tastiera per cambiare scena finché non colleghiamo il controller.
+  function goToId(id) {
+    const i = scenes.findIndex((s) => s.id === id);
+    if (i >= 0) current = i;
+  }
+
+  // Tastiera: frecce per scorrere le scene (1, 2, S e spazio sono gestiti come bottoni del controller)
   function onKeydown(e) {
     if (e.key === 'ArrowRight') goTo(current + 1);
     else if (e.key === 'ArrowLeft') goTo(current - 1);
-    else if (/^[1-9]$/.test(e.key) && +e.key <= scenes.length) goTo(+e.key - 1);
   }
 
   // Tap: schermo intero + niente standby, così il telefono resta acceso nel costume.

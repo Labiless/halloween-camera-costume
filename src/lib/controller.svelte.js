@@ -6,6 +6,10 @@ import { gaze } from './gaze.svelte.js';
 const HAT_AXIS = 9;
 // La codifica di questo controller è ruotata di 90°: "destra" arriva come "su".
 const HAT_OFFSET = 2;
+// Su Android (mapping "standard") lo stesso analogico arriva come croce direzionale:
+// bottoni 12-15. Stessa rotazione da correggere, se serve si regola a parte.
+const DPAD = { up: 12, down: 13, left: 14, right: 15 };
+const DPAD_OFFSET = 2;
 // Quanto lontano guarda l'occhio quando punti (1 = bordo massimo).
 const REACH = 0.95;
 // Dopo aver rilasciato, l'occhio resta al centro per questo tempo, poi torna autonomo.
@@ -14,15 +18,22 @@ const RETURN_TO_AUTO_MS = 4000;
 // Bottoni del controller (indici della Gamepad API)
 export const BUTTONS = {
   ACTION: 0, // azione della scena (es. foto del volto)
-  NEXT_SCENE: 4,
+  SCENE_CAMERA: 1, // vai alla scena night vision
+  SCENE_VOICE: 2, // vai alla scena voce
+  NEXT_SCENE: 4, // scena successiva, a ciclo
 };
 
 // Tasti per provare sul Mac senza controller
 const KEYBOARD = {
   ' ': BUTTONS.ACTION,
+  1: BUTTONS.SCENE_CAMERA,
+  2: BUTTONS.SCENE_VOICE,
+  s: BUTTONS.NEXT_SCENE,
+  S: BUTTONS.NEXT_SCENE,
 };
 
 const listeners = new Set();
+const stickListeners = new Set();
 
 // Registra una callback chiamata con l'indice del bottone a ogni pressione.
 // Restituisce la funzione per rimuoverla (va bene come return di un $effect).
@@ -31,14 +42,33 @@ export function onButton(cb) {
   return () => listeners.delete(cb);
 }
 
+// Callback chiamata quando l'analogico esce dalla posizione di riposo.
+export function onStick(cb) {
+  stickListeners.add(cb);
+  return () => stickListeners.delete(cb);
+}
+
 function emit(index) {
   for (const cb of listeners) cb(index);
 }
 
-// 0 = su, poi in senso orario; null = fermo
+// Direzioni: 0 = su, poi in senso orario fino a 7; null = fermo
 function decodeHat(v) {
   if (v === undefined || v > 1.1 || v < -1.1) return null;
   return (Math.round((v + 1) / (2 / 7)) + HAT_OFFSET) % 8;
+}
+
+function decodeDpad(buttons) {
+  const p = (i) => (buttons[i]?.pressed ? 1 : 0);
+  const x = p(DPAD.right) - p(DPAD.left);
+  const y = p(DPAD.down) - p(DPAD.up);
+  if (!x && !y) return null;
+  return (Math.round(Math.atan2(x, -y) / (Math.PI / 4)) + 8 + DPAD_OFFSET) % 8;
+}
+
+// Mac: hat switch sull'asse 9. Android: croce direzionale sui bottoni 12-15.
+function readDirection(gp) {
+  return decodeHat(gp.axes[HAT_AXIS]) ?? decodeDpad(gp.buttons);
 }
 
 export function startController() {
@@ -49,13 +79,15 @@ export function startController() {
 
   function poll() {
     const gp = [...navigator.getGamepads()].find(Boolean);
-    const dir = gp ? decodeHat(gp.axes[HAT_AXIS]) : null;
+    const dir = gp ? readDirection(gp) : null;
 
     // Evento solo sul fronte di pressione, non mentre il bottone resta premuto
     gp?.buttons.forEach((b, i) => {
       if (b.pressed && !prevButtons[i]) emit(i);
       prevButtons[i] = b.pressed;
     });
+
+    if (dir !== null && !wasPointing) for (const cb of stickListeners) cb();
 
     if (dir !== null) {
       // Punta: l'occhio guarda nella direzione premuta
