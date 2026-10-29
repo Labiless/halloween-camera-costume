@@ -20,6 +20,7 @@ export const BUTTONS = {
   ACTION: 0, // azione della scena (es. foto del volto)
   SCENE_CAMERA: 1, // vai alla scena night vision
   SCENE_VOICE: 2, // vai alla scena voce
+  SCENE_GIFS: 3, // vai alla scena apocalisse (GIF)
   NEXT_SCENE: 4, // scena successiva, a ciclo
 };
 
@@ -28,6 +29,7 @@ const KEYBOARD = {
   ' ': BUTTONS.ACTION,
   1: BUTTONS.SCENE_CAMERA,
   2: BUTTONS.SCENE_VOICE,
+  3: BUTTONS.SCENE_GIFS,
   s: BUTTONS.NEXT_SCENE,
   S: BUTTONS.NEXT_SCENE,
 };

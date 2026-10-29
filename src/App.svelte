@@ -6,6 +6,7 @@
   const SCENE_BUTTONS = {
     [BUTTONS.SCENE_CAMERA]: 'night-vision',
     [BUTTONS.SCENE_VOICE]: 'voice',
+    [BUTTONS.SCENE_GIFS]: 'apocalypse',
   };
 
   $effect(() => startController());
