@@ -1,6 +1,8 @@
 <script>
   import { scenes } from './lib/scenes/index.js';
-  import CctvOverlay from './lib/CctvOverlay.svelte';
+  import { startController } from './lib/controller.svelte.js';
+
+  $effect(() => startController());
 
   let current = $state(0);
   let scene = $derived(scenes[current]);
@@ -21,6 +23,8 @@
   async function onTap() {
     try {
       if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.();
+      // Il telefono sta sempre in orizzontale (funziona solo in fullscreen, su Android)
+      await screen.orientation?.lock?.('landscape');
     } catch {}
     try {
       if (!wakeLock && 'wakeLock' in navigator) {
@@ -38,7 +42,6 @@
   {#key scene.id}
     <scene.component />
   {/key}
-  <CctvOverlay label={scene.label} channel={current + 1} />
 </main>
 
 <style>

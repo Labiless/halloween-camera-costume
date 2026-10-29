@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gamepad test</title>
+    <style>
+      body { margin: 0; padding: 16px; background: #000; color: #0f0; font: 14px ui-monospace, Menlo, monospace; }
+      pre { white-space: pre-wrap; margin: 0; }
+      #rumble { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+      #rumble button { font: inherit; padding: 8px 12px; background: #030; color: #0f0; border: 1px solid #0f0; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div id="rumble">
+      <button data-ms="200" data-strong="1" data-weak="0">Vibra breve forte</button>
+      <button data-ms="800" data-strong="0.3" data-weak="1">Vibra lunga debole</button>
+      <button data-ms="1500" data-strong="1" data-weak="1">Vibra 1.5s max</button>
+    </div>
+    <pre id="state">Collega il controller e premi un bottone...</pre>
+    <pre id="log"></pre>
+    <script>
+      // Stampa in console (e a schermo) pressioni dei bottoni e movimenti degli assi.
+      const DEADZONE = 0.15;
+      const prev = {};
+      const stateEl = document.getElementById('state');
+      const logEl = document.getElementById('log');
+
+      function log(msg) {
+        console.log(msg);
+        logEl.textContent = msg + '\n' + logEl.textContent.split('\n').slice(0, 30).join('\n');
+      }
+
+      addEventListener('gamepadconnected', (e) =>
+        log(`CONNESSO #${e.gamepad.index}: "${e.gamepad.id}" mapping="${e.gamepad.mapping}" ` +
+            `bottoni=${e.gamepad.buttons.length} assi=${e.gamepad.axes.length}`));
+      addEventListener('gamepaddisconnected', (e) => log(`DISCONNESSO #${e.gamepad.index}`));
+
+      // Molti controller economici si presentano come tastiera/telecomando:
+      // registriamo anche i tasti e blocchiamo l'azione di default dove il browser lo permette.
+      for (const type of ['keydown', 'keyup']) {
+        addEventListener(type, (e) => {
+          e.preventDefault();
+          if (type === 'keydown' && e.repeat) return;
+          log(`TASTO ${type === 'keydown' ? 'giù' : 'su '} key="${e.key}" code="${e.code}" keyCode=${e.keyCode}`);
+        }, { capture: true });
+      }
+      addEventListener('wheel', (e) => { e.preventDefault(); log(`WHEEL dx=${e.deltaX} dy=${e.deltaY}`); }, { passive: false });
+      addEventListener('mousedown', (e) => {
+        if (e.target.closest('#rumble')) return;
+        e.preventDefault();
+        log(`MOUSE bottone ${e.button}`);
+      });
+
+      // Vibrazione: Chrome/Edge/Safari usano vibrationActuator, Firefox hapticActuators
+      document.getElementById('rumble').addEventListener('click', async (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const { ms, strong, weak } = btn.dataset;
+        const pads = navigator.getGamepads().filter(Boolean);
+        if (!pads.length) return log('VIBRA: nessun controller (premi prima un bottone)');
+        for (const gp of pads) {
+          const va = gp.vibrationActuator;
+          if (va) {
+            log(`VIBRA [${gp.index}] vibrationActuator effects=${JSON.stringify(va.effects ?? va.type)}`);
+            try {
+              const res = await va.playEffect('dual-rumble', {
+                duration: +ms, strongMagnitude: +strong, weakMagnitude: +weak,
+              });
+              log(`VIBRA [${gp.index}] risultato: ${res}`);
+            } catch (err) {
+              log(`VIBRA [${gp.index}] errore: ${err.message}`);
+            }
+          } else if (gp.hapticActuators?.length) {
+            const ok = await gp.hapticActuators[0].pulse(Math.max(+strong, +weak), +ms);
+            log(`VIBRA [${gp.index}] hapticActuators.pulse: ${ok}`);
+          } else {
+            log(`VIBRA [${gp.index}] non supportata (nessun attuatore esposto)`);
+          }
+        }
+      });
+      addEventListener('contextmenu', (e) => e.preventDefault());
+
+      // Il tasto "indietro" del browser: teniamo una voce finta nella history e la ripristiniamo
+      history.pushState(null, '', location.href);
+      addEventListener('popstate', () => {
+        log('BACK (bloccato)');
+        history.pushState(null, '', location.href);
+      });
+
+      // Hat switch su un solo asse (codifica standard HID usata da Chrome):
+      // 8 valori tra -1 e 1 a passi di 2/7, partendo da "su" in senso orario; ~1.29 = fermo.
+      const HAT_AXIS = 9;
+      // Questo controller ha la codifica ruotata di 90°: "destra" arriva come "su".
+      const HAT_OFFSET = 2;
+      const HAT_DIRS = ['↑ su', '↗ su-destra', '→ destra', '↘ giù-destra', '↓ giù', '↙ giù-sinistra', '← sinistra', '↖ su-sinistra'];
+      function decodeHat(v) {
+        if (v === undefined || v > 1.1 || v < -1.1) return null;
+        return (Math.round((v + 1) / (2 / 7)) + HAT_OFFSET) % 8;
+      }
+      let prevHat = null;
+
+      function poll() {
+        const lines = [];
+        for (const gp of navigator.getGamepads()) {
+          if (!gp) continue;
+          const p = (prev[gp.index] ??= { buttons: [], axes: [] });
+
+          gp.buttons.forEach((b, i) => {
+            if (b.pressed !== !!p.buttons[i]) log(`[${gp.index}] bottone ${i} ${b.pressed ? 'PREMUTO' : 'rilasciato'} (value=${b.value.toFixed(2)})`);
+            p.buttons[i] = b.pressed;
+          });
+
+          gp.axes.forEach((v, i) => {
+            const val = Math.abs(v) < DEADZONE ? 0 : Math.round(v * 10) / 10;
+            if (val !== (p.axes[i] ?? 0)) log(`[${gp.index}] asse ${i} = ${val.toFixed(1)}`);
+            p.axes[i] = val;
+          });
+
+          const raw = gp.axes[HAT_AXIS];
+          const hat = decodeHat(raw);
+          if (hat !== prevHat) {
+            log(`HAT ${hat === null ? '· fermo' : HAT_DIRS[hat]}  (asse ${HAT_AXIS} = ${raw?.toFixed(3)})`);
+            prevHat = hat;
+          }
+
+          lines.push(
+            `#${gp.index} ${gp.id}`,
+            `hat:     ${hat === null ? '· fermo' : HAT_DIRS[hat]}`,
+            `assi:    ${gp.axes.map((v, i) => `${i}:${v.toFixed(2).padStart(5)}`).join('  ')}`,
+            `bottoni: ${gp.buttons.map((b, i) => (b.pressed ? `[${i}]` : ` ${i} `)).join('')}`,
+            ''
+          );
+        }
+        if (lines.length) stateEl.textContent = lines.join('\n');
+        requestAnimationFrame(poll);
+      }
+      poll();
+    </script>
+  </body>
+</html>

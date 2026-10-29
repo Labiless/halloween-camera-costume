@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "svelte": "^5.57.3",
     "vite": "^8.3.5"
   }
